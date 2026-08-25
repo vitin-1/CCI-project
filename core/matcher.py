@@ -28,7 +28,8 @@ def search_similar_faces(
             SELECT photo_id,
                    (1.0 - (embedding <=> CAST(:vec AS vector))) AS similarity
             FROM face_entries
-            WHERE (1.0 - (embedding <=> CAST(:vec AS vector))) >= :threshold
+            WHERE expires_at > NOW()
+              AND (1.0 - (embedding <=> CAST(:vec AS vector))) >= :threshold
             ORDER BY embedding <=> CAST(:vec AS vector) ASC
             LIMIT :k
         """),

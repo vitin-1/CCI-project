@@ -33,7 +33,7 @@ class FaceEntry(Base):
     __tablename__ = "face_entries"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    photo_id: Mapped[str] = mapped_column(String, ForeignKey("photos.id"), nullable=False)
+    photo_id: Mapped[str] = mapped_column(String, ForeignKey("photos.id"), nullable=False, index=True)
     # Embedding facial 512-d armazenado direto no Postgres via pgvector — substitui faiss_id
     embedding: Mapped[list[float]] = mapped_column(Vector(512), nullable=False)
     bbox: Mapped[dict] = mapped_column(JSON, nullable=False)  # {x1, y1, x2, y2}

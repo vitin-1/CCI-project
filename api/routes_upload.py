@@ -28,10 +28,25 @@ def require_admin(x_admin_token: str = Header(...)) -> None:
         )
 
 
+def _cleanup_storage(uploaded: list[tuple[str, str]]) -> None:
+    """Remove do Storage os arquivos já enviados em caso de erro (best-effort — não lança)."""
+    if not uploaded:
+        return
+    supabase = get_supabase()
+    for bucket, key in uploaded:
+        try:
+            supabase.storage.from_(bucket).remove([key])
+            logger.info("storage_cleanup_ok bucket=%s key=%s", bucket, key)
+        except Exception:
+            logger.warning("storage_cleanup_failed bucket=%s key=%s", bucket, key)
+
+
 def _index_single_photo(photo_path: Path, db: Session) -> int:
     """
     Indexa uma foto: detecta rostos, faz upload para Supabase Storage e persiste
-    embeddings direto no Postgres. Retorna o número de rostos indexados. Nunca lança.
+    embeddings direto no Postgres. Retorna o número de rostos indexados.
+    Lança exceção em caso de erro — o chamador é responsável pelo rollback de DB.
+    Em erro, reverte os uploads já realizados no Storage (best-effort).
     """
     img = cv2.imread(str(photo_path))
     if img is None:
@@ -47,52 +62,59 @@ def _index_single_photo(photo_path: Path, db: Session) -> int:
     suffix = photo_path.suffix.lower()
     original_key = f"{photo_id}{suffix}"
     preview_key = f"{photo_id}.jpg"
-
-    supabase = get_supabase()
-    content_type = mimetypes.guess_type(str(photo_path))[0] or "image/jpeg"
-
-    # Upload do original para bucket privado
-    with open(photo_path, "rb") as f:
-        original_bytes = f.read()
-    supabase.storage.from_(settings.supabase_bucket_originals).upload(
-        original_key, original_bytes, {"content-type": content_type}
-    )
-
-    # Gera preview com watermark em memória e faz upload para bucket público
-    preview_bytes = apply_watermark(photo_path)
     preview_url = ""
-    if preview_bytes:
-        supabase.storage.from_(settings.supabase_bucket_previews).upload(
-            preview_key, preview_bytes, {"content-type": "image/jpeg"}
+    uploaded: list[tuple[str, str]] = []  # rastro para cleanup em caso de erro
+
+    try:
+        if not settings.dry_run:
+            supabase = get_supabase()
+            content_type = mimetypes.guess_type(str(photo_path))[0] or "image/jpeg"
+
+            with open(photo_path, "rb") as f:
+                original_bytes = f.read()
+            supabase.storage.from_(settings.supabase_bucket_originals).upload(
+                original_key, original_bytes, {"content-type": content_type}
+            )
+            uploaded.append((settings.supabase_bucket_originals, original_key))
+
+            preview_bytes = apply_watermark(photo_path)
+            if preview_bytes:
+                supabase.storage.from_(settings.supabase_bucket_previews).upload(
+                    preview_key, preview_bytes, {"content-type": "image/jpeg"}
+                )
+                uploaded.append((settings.supabase_bucket_previews, preview_key))
+                preview_url = supabase.storage.from_(settings.supabase_bucket_previews).get_public_url(preview_key)
+
+        photo = Photo(
+            id=photo_id,
+            filename=photo_path.name,
+            original_path=original_key,
+            preview_path=preview_url,
+            expires_at=expires_at,
+            face_count=len(faces),
         )
-        preview_url = supabase.storage.from_(settings.supabase_bucket_previews).get_public_url(preview_key)
+        db.add(photo)
+        db.flush()
 
-    photo = Photo(
-        id=photo_id,
-        filename=photo_path.name,
-        original_path=original_key,
-        preview_path=preview_url,
-        expires_at=expires_at,
-        face_count=len(faces),
-    )
-    db.add(photo)
-    db.flush()
+        if faces and not settings.dry_run:
+            for face in faces:
+                db.add(FaceEntry(
+                    photo_id=photo.id,
+                    embedding=face["embedding"].tolist(),
+                    bbox=face["bbox"],
+                    expires_at=expires_at,
+                ))
 
-    if faces and not settings.dry_run:
-        for face in faces:
-            db.add(FaceEntry(
-                photo_id=photo.id,
-                embedding=face["embedding"].tolist(),
-                bbox=face["bbox"],
-                expires_at=expires_at,
-            ))
+        if not settings.dry_run:
+            db.commit()
+        else:
+            db.rollback()
 
-    if not settings.dry_run:
-        db.commit()
-    else:
-        db.rollback()
+        return len(faces)
 
-    return len(faces)
+    except Exception:
+        _cleanup_storage(uploaded)
+        raise
 
 
 _SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -158,12 +180,23 @@ def get_original(photo_id: str, db: Session = Depends(get_db)) -> RedirectRespon
         response = supabase.storage.from_(settings.supabase_bucket_originals).create_signed_url(
             photo.original_path, expires_in=300
         )
-        signed_url = response.signed_url
+        # supabase-py v2 retorna objeto com .signed_url; versões anteriores retornavam dict {"signedURL": ...}
+        if isinstance(response, dict):
+            signed_url = response.get("signedURL") or response.get("signed_url", "")
+        else:
+            signed_url = getattr(response, "signed_url", "") or getattr(response, "signedURL", "")
     except Exception:
         logger.exception("signed_url_failed photo_id=%s path=%s", photo_id, photo.original_path)
         raise HTTPException(
             status_code=500,
             detail={"code": "STORAGE_ERROR", "message": "Erro ao gerar URL de acesso ao original."},
+        )
+
+    if not signed_url:
+        logger.error("empty_signed_url photo_id=%s path=%s", photo_id, photo.original_path)
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "STORAGE_ERROR", "message": "URL de acesso ao original não pôde ser gerada."},
         )
 
     return RedirectResponse(url=signed_url, status_code=302)

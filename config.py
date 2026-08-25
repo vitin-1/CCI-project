@@ -1,7 +1,9 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env")
+
     # Reconhecimento facial
     similarity_threshold: float = 0.5
     embedding_ttl_days: int = 90
@@ -22,9 +24,6 @@ class Settings(BaseSettings):
 
     # Operação
     dry_run: bool = False
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()

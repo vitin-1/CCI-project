@@ -63,6 +63,7 @@ def main() -> None:
     indexed = failed = total_faces = 0
 
     for i, photo_path in enumerate(photos, 1):
+        uploaded: list[tuple[str, str]] = []  # rastro para cleanup em caso de erro
         try:
             img = cv2.imread(str(photo_path))
             if img is None:
@@ -79,8 +80,8 @@ def main() -> None:
             suffix = photo_path.suffix.lower()
             original_key = f"{photo_id}{suffix}"
             preview_key = f"{photo_id}.jpg"
-
             preview_url = ""
+
             if not settings.dry_run:
                 content_type = mimetypes.guess_type(str(photo_path))[0] or "image/jpeg"
                 with open(photo_path, "rb") as f:
@@ -88,12 +89,14 @@ def main() -> None:
                 supabase.storage.from_(settings.supabase_bucket_originals).upload(
                     original_key, original_bytes, {"content-type": content_type}
                 )
+                uploaded.append((settings.supabase_bucket_originals, original_key))
 
                 preview_bytes = apply_watermark(photo_path)
                 if preview_bytes:
                     supabase.storage.from_(settings.supabase_bucket_previews).upload(
                         preview_key, preview_bytes, {"content-type": "image/jpeg"}
                     )
+                    uploaded.append((settings.supabase_bucket_previews, preview_key))
                     preview_url = supabase.storage.from_(settings.supabase_bucket_previews).get_public_url(preview_key)
 
             photo = Photo(
@@ -128,6 +131,12 @@ def main() -> None:
         except Exception:
             logger.exception("[%d/%d] falha photo=%s", i, len(photos), photo_path.name)
             db.rollback()
+            for bucket, key in uploaded:
+                try:
+                    supabase.storage.from_(bucket).remove([key])
+                    logger.info("storage_cleanup_ok bucket=%s key=%s", bucket, key)
+                except Exception:
+                    logger.warning("storage_cleanup_failed bucket=%s key=%s", bucket, key)
             failed += 1
 
     db.close()
