@@ -18,8 +18,10 @@ def test_normalize_zero_vector_safe():
 
 
 def _make_face(area: int) -> dict:
+    # detect_faces sempre retorna embeddings normalizados — o mock deve refletir isso
+    embedding = normalize(np.ones(EMBEDDING_DIM, dtype=np.float32) * area)
     return {
-        "embedding": np.ones(EMBEDDING_DIM, dtype=np.float32) * area,
+        "embedding": embedding,
         "bbox": {"x1": 0, "y1": 0, "x2": area, "y2": area},
     }
 

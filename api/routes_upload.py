@@ -1,11 +1,12 @@
 import logging
 import mimetypes
+import tempfile
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import cv2
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -41,25 +42,31 @@ def _cleanup_storage(uploaded: list[tuple[str, str]]) -> None:
             logger.warning("storage_cleanup_failed bucket=%s key=%s", bucket, key)
 
 
-def _index_single_photo(photo_path: Path, db: Session) -> int:
+def _index_single_photo(
+    photo_path: Path,
+    db: Session,
+    original_filename: str | None = None,
+) -> Photo | None:
     """
     Indexa uma foto: detecta rostos, faz upload para Supabase Storage e persiste
-    embeddings direto no Postgres. Retorna o número de rostos indexados.
-    Lança exceção em caso de erro — o chamador é responsável pelo rollback de DB.
+    embeddings direto no Postgres.
+    Retorna o objeto Photo persistido, ou None se a imagem for ilegível.
+    Lança exceção em outros erros — o chamador é responsável pelo rollback de DB.
     Em erro, reverte os uploads já realizados no Storage (best-effort).
     """
     img = cv2.imread(str(photo_path))
     if img is None:
         logger.warning("unreadable_photo path=%s", photo_path)
-        return 0
+        return None
 
     faces = detect_faces(img)
     if not faces:
         logger.warning("no_faces_detected path=%s", photo_path)
 
+    filename = original_filename or photo_path.name
     expires_at = datetime.now(timezone.utc) + timedelta(days=settings.embedding_ttl_days)
     photo_id = str(uuid.uuid4())
-    suffix = photo_path.suffix.lower()
+    suffix = Path(filename).suffix.lower() or photo_path.suffix.lower()
     original_key = f"{photo_id}{suffix}"
     preview_key = f"{photo_id}.jpg"
     preview_url = ""
@@ -68,7 +75,7 @@ def _index_single_photo(photo_path: Path, db: Session) -> int:
     try:
         if not settings.dry_run:
             supabase = get_supabase()
-            content_type = mimetypes.guess_type(str(photo_path))[0] or "image/jpeg"
+            content_type = mimetypes.guess_type(filename)[0] or "image/jpeg"
 
             with open(photo_path, "rb") as f:
                 original_bytes = f.read()
@@ -87,7 +94,7 @@ def _index_single_photo(photo_path: Path, db: Session) -> int:
 
         photo = Photo(
             id=photo_id,
-            filename=photo_path.name,
+            filename=filename,
             original_path=original_key,
             preview_path=preview_url,
             expires_at=expires_at,
@@ -110,7 +117,7 @@ def _index_single_photo(photo_path: Path, db: Session) -> int:
         else:
             db.rollback()
 
-        return len(faces)
+        return photo
 
     except Exception:
         _cleanup_storage(uploaded)
@@ -141,10 +148,13 @@ def upload_batch(folder: str, db: Session = Depends(get_db)) -> dict:
 
     for photo_path in photos:
         try:
-            faces = _index_single_photo(photo_path, db)
-            total_faces += faces
-            indexed += 1
-            logger.info("indexed photo=%s faces=%d", photo_path.name, faces)
+            result = _index_single_photo(photo_path, db)
+            if result is not None:
+                total_faces += result.face_count
+                indexed += 1
+                logger.info("indexed photo=%s faces=%d", photo_path.name, result.face_count)
+            else:
+                failed += 1  # imagem ilegível
         except Exception:
             logger.exception("index_failed photo=%s", photo_path.name)
             db.rollback()
@@ -156,6 +166,65 @@ def upload_batch(folder: str, db: Session = Depends(get_db)) -> dict:
             "indexed": indexed,
             "failed": failed,
             "total_faces": total_faces,
+            "dry_run": settings.dry_run,
+        }
+    }
+
+
+@router.post("/upload", dependencies=[Depends(require_admin)])
+async def upload_single(
+    photo: UploadFile = File(..., description="Foto do evento (JPEG/PNG/WebP). Indexada e enviada ao Storage."),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Indexa uma única foto enviada via HTTP (admin-only)."""
+    suffix = Path(photo.filename or "").suffix.lower()
+    if suffix not in _SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "UNSUPPORTED_FORMAT",
+                "message": f"Formato não suportado. Aceitos: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}",
+            },
+        )
+
+    image_bytes = await photo.read()
+    max_bytes = int(settings.max_image_size_mb * 1024 * 1024)
+    if len(image_bytes) > max_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "IMAGE_TOO_LARGE", "message": f"Imagem maior que {settings.max_image_size_mb} MB."},
+        )
+
+    # cv2.imread precisa de um path — escrevemos em tempfile e limpamos no finally
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(image_bytes)
+        tmp_path = Path(tmp.name)
+    del image_bytes
+
+    try:
+        result = _index_single_photo(tmp_path, db, original_filename=photo.filename)
+    except Exception:
+        logger.exception("upload_single_failed filename=%s", photo.filename)
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail={"code": "INDEX_ERROR", "message": "Erro ao indexar a foto."},
+        )
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    if result is None:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "UNREADABLE_IMAGE", "message": "Não foi possível ler a imagem enviada."},
+        )
+
+    return {
+        "data": {
+            "photo_id": result.id,
+            "filename": result.filename,
+            "face_count": result.face_count,
+            "preview_url": result.preview_path,
             "dry_run": settings.dry_run,
         }
     }
