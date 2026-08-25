@@ -1,3 +1,4 @@
+import io
 import logging
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
@@ -18,10 +19,10 @@ def _load_font(size: int) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def apply_watermark(source_path: Path, dest_path: Path) -> bool:
+def apply_watermark(source_path: Path) -> bytes | None:
     """
-    Cria uma cópia redimensionada de `source_path` com marca d'água em `dest_path`.
-    Retorna True em sucesso, False em falha (sem lançar exceção).
+    Gera uma cópia redimensionada de `source_path` com marca d'água.
+    Retorna os bytes JPEG resultantes, ou None em falha (sem lançar exceção).
     """
     try:
         with Image.open(source_path) as img:
@@ -44,10 +45,10 @@ def apply_watermark(source_path: Path, dest_path: Path) -> bool:
             draw.text((x, y), WATERMARK_TEXT, font=font, fill=(255, 255, 255, 190))
 
             result = Image.alpha_composite(img, overlay).convert("RGB")
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            result.save(dest_path, "JPEG", quality=PREVIEW_QUALITY)
+            buf = io.BytesIO()
+            result.save(buf, "JPEG", quality=PREVIEW_QUALITY)
+            return buf.getvalue()
 
-        return True
     except Exception:
-        logger.exception("watermark_failed source=%s dest=%s", source_path, dest_path)
-        return False
+        logger.exception("watermark_failed source=%s", source_path)
+        return None

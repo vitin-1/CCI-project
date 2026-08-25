@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CLI para indexar uma pasta de fotos de evento no FAISS e banco de dados.
+CLI para indexar uma pasta de fotos de evento no Postgres (pgvector) e Supabase Storage.
 
 Uso:
     python -m scripts.index_batch /caminho/para/fotos
@@ -9,7 +9,10 @@ Uso:
 """
 import argparse
 import logging
+import mimetypes
 import sys
+import uuid
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 logging.basicConfig(
@@ -22,9 +25,9 @@ _SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Indexa fotos de uma pasta no FAISS e banco de dados.")
+    parser = argparse.ArgumentParser(description="Indexa fotos de uma pasta no Postgres e Supabase Storage.")
     parser.add_argument("folder", help="Caminho da pasta com as fotos do evento")
-    parser.add_argument("--dry-run", action="store_true", help="Processa sem salvar no banco/índice")
+    parser.add_argument("--dry-run", action="store_true", help="Processa sem salvar no banco/storage")
     parser.add_argument("--threshold", type=float, help="Override do threshold de similaridade")
     args = parser.parse_args()
 
@@ -40,18 +43,15 @@ def main() -> None:
         settings.similarity_threshold = args.threshold
 
     from db.database import init_db, SessionLocal
-    from core.indexer import get_index, save_index, invalidate_index_cache
+    from db.models import Photo, FaceEntry
+    from db.supabase_client import get_supabase
     from core.detector import detect_faces
     from core.watermark import apply_watermark
-    from db.models import Photo, FaceEntry
-    from core.indexer import add_embeddings
     import cv2
-    import uuid
-    from datetime import datetime, timedelta, timezone
 
     init_db()
-    index = get_index()
     db = SessionLocal()
+    supabase = get_supabase()
 
     photos = sorted(p for p in folder.iterdir() if p.suffix.lower() in _SUPPORTED_EXTENSIONS)
     if not photos:
@@ -75,14 +75,32 @@ def main() -> None:
                 logger.warning("[%d/%d] no_faces photo=%s", i, len(photos), photo_path.name)
 
             expires_at = datetime.now(timezone.utc) + timedelta(days=settings.embedding_ttl_days)
-            preview_path = settings.storage_previews / photo_path.name
-            apply_watermark(photo_path, preview_path)
+            photo_id = str(uuid.uuid4())
+            suffix = photo_path.suffix.lower()
+            original_key = f"{photo_id}{suffix}"
+            preview_key = f"{photo_id}.jpg"
+
+            preview_url = ""
+            if not settings.dry_run:
+                content_type = mimetypes.guess_type(str(photo_path))[0] or "image/jpeg"
+                with open(photo_path, "rb") as f:
+                    original_bytes = f.read()
+                supabase.storage.from_(settings.supabase_bucket_originals).upload(
+                    original_key, original_bytes, {"content-type": content_type}
+                )
+
+                preview_bytes = apply_watermark(photo_path)
+                if preview_bytes:
+                    supabase.storage.from_(settings.supabase_bucket_previews).upload(
+                        preview_key, preview_bytes, {"content-type": "image/jpeg"}
+                    )
+                    preview_url = supabase.storage.from_(settings.supabase_bucket_previews).get_public_url(preview_key)
 
             photo = Photo(
-                id=str(uuid.uuid4()),
+                id=photo_id,
                 filename=photo_path.name,
-                original_path=str(photo_path.resolve()),
-                preview_path=str(preview_path.resolve()),
+                original_path=original_key,
+                preview_path=preview_url,
                 expires_at=expires_at,
                 face_count=len(faces),
             )
@@ -90,11 +108,10 @@ def main() -> None:
             db.flush()
 
             if faces and not settings.dry_run:
-                faiss_ids = add_embeddings(index, [f["embedding"] for f in faces])
-                for face, faiss_id in zip(faces, faiss_ids):
+                for face in faces:
                     db.add(FaceEntry(
                         photo_id=photo.id,
-                        faiss_id=faiss_id,
+                        embedding=face["embedding"].tolist(),
                         bbox=face["bbox"],
                         expires_at=expires_at,
                     ))
@@ -112,10 +129,6 @@ def main() -> None:
             logger.exception("[%d/%d] falha photo=%s", i, len(photos), photo_path.name)
             db.rollback()
             failed += 1
-
-    if not settings.dry_run:
-        save_index(index)
-        invalidate_index_cache()
 
     db.close()
     logger.info(

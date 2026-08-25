@@ -7,10 +7,9 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from core.detector import extract_largest_face_embedding
-from core.indexer import get_index
 from core.matcher import search_similar_faces
 from db.database import get_db
-from db.models import FaceEntry, Photo
+from db.models import Photo
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["search"])
@@ -55,30 +54,26 @@ async def search(
             detail={"code": "NO_FACE_DETECTED", "message": "Nenhum rosto detectado na selfie enviada."},
         )
 
-    index = get_index()
-    raw_matches = search_similar_faces(embedding, index)
+    # matcher retorna (photo_id, similarity) diretamente via query pgvector
+    raw_matches = search_similar_faces(embedding, db)
 
     results: list[dict] = []
     seen_photos: set[str] = set()
 
-    for faiss_id, similarity in raw_matches:
-        entry = db.query(FaceEntry).filter(FaceEntry.faiss_id == faiss_id).first()
-        if entry is None:
-            logger.warning("faiss_id_not_in_db faiss_id=%d", faiss_id)
+    for photo_id, similarity in raw_matches:
+        if photo_id in seen_photos:
             continue
+        seen_photos.add(photo_id)
 
-        if entry.photo_id in seen_photos:
-            continue
-        seen_photos.add(entry.photo_id)
-
-        photo = db.get(Photo, entry.photo_id)
+        photo = db.get(Photo, photo_id)
         if photo is None:
+            logger.warning("photo_id_not_in_db photo_id=%s", photo_id)
             continue
 
         results.append({
             "photo_id": photo.id,
             "filename": photo.filename,
-            "preview_url": f"/previews/{photo.filename}",
+            "preview_url": photo.preview_path,  # URL pública do Supabase Storage
             "similarity": round(similarity, 4),
         })
 

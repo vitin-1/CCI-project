@@ -2,7 +2,6 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from db.database import init_db
@@ -38,10 +37,5 @@ app.include_router(search_router)
 
 @app.on_event("startup")
 async def startup() -> None:
-    settings.storage_originals.mkdir(parents=True, exist_ok=True)
-    settings.storage_previews.mkdir(parents=True, exist_ok=True)
+    # Cria extensão pgvector (se necessário) e tabelas no Postgres
     init_db()
-
-
-# Serve previews como arquivos estáticos — nunca servir storage/originals diretamente
-app.mount("/previews", StaticFiles(directory=str(settings.storage_previews)), name="previews")
