@@ -1,0 +1,11 @@
+# Backend Python — só o frontend vai para o Vercel; o backend fica no Railway
+requirements.txt
+Procfile
+nixpacks.toml
+api/
+db/
+core/
+scripts/
+tests/
+.venv/
+*.py
