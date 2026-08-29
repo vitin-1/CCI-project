@@ -1,5 +1,6 @@
 # Backend Python — só o frontend vai para o Vercel; o backend fica no Railway
 requirements.txt
+requirements-backend.txt
 Procfile
 nixpacks.toml
 api/
