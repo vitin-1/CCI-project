@@ -13,6 +13,9 @@ build/
 .env
 *.env.local
 
+# Vercel
+.vercel/
+
 # Editor / OS
 .claude/
 .vscode/
