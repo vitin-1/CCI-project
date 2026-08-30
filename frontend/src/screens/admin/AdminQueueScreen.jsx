@@ -51,9 +51,17 @@ export default function AdminQueueScreen() {
           <h2 style={{ marginBottom: 2 }}>Fila de Revisão</h2>
           {!loading && <p style={{ fontSize: 13 }}>{queue.length} pendente{queue.length !== 1 ? 's' : ''}</p>}
         </div>
-        <button onClick={logout} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14 }}>
-          Sair
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <button
+            onClick={() => navigate('/admin/upload')}
+            style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 600 }}
+          >
+            + Upload
+          </button>
+          <button onClick={logout} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14 }}>
+            Sair
+          </button>
+        </div>
       </div>
 
       {loading && (

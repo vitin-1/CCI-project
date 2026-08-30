@@ -41,6 +41,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import AdminLoginScreen from './screens/admin/AdminLoginScreen';
 import AdminQueueScreen from './screens/admin/AdminQueueScreen';
 import AdminCaseScreen from './screens/admin/AdminCaseScreen';
+import AdminUploadScreen from './screens/admin/AdminUploadScreen';
 
 // ─── Erros ───────────────────────────────────────────────────────────────────
 import NotFoundScreen from './screens/NotFoundScreen';
@@ -140,6 +141,7 @@ function AppRoutes() {
         <Route path="/admin" element={<AdminLoginScreen />} />
         <Route path="/admin/queue" element={<AdminQueueScreen />} />
         <Route path="/admin/case/:id" element={<AdminCaseScreen />} />
+        <Route path="/admin/upload" element={<AdminUploadScreen />} />
 
         {/* Fallback — qualquer URL desconhecida exibe tela 404 */}
         <Route path="*" element={<NotFoundScreen />} />

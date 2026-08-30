@@ -74,5 +74,16 @@ export const api = {
       request('POST', `/admin/queue/${reportId}/approve`, null, { headers: { 'x-admin-token': token } }),
     reject: (reportId, token) =>
       request('POST', `/admin/queue/${reportId}/reject`, null, { headers: { 'x-admin-token': token } }),
+    createEvent: (name, token) =>
+      request('POST', '/events', { name }, { headers: { 'x-admin-token': token } }),
+    deleteEvent: (eventId, token) =>
+      request('DELETE', `/events/${eventId}`, null, { headers: { 'x-admin-token': token } }),
+    uploadPhoto: (eventId, file, token) => {
+      const fd = new FormData();
+      fd.append('photo', file, file.name);
+      return request('POST', `/upload?event_id=${encodeURIComponent(eventId)}`, fd, {
+        headers: { 'x-admin-token': token },
+      });
+    },
   },
 };
