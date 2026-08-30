@@ -1,7 +1,6 @@
 # Backend Python — só o frontend vai para o Vercel; o backend fica no Railway
 # Usar / no início para ancorar na raiz e não afetar frontend/src/api/
 /requirements.txt
-/requirements-backend.txt
 /Procfile
 /nixpacks.toml
 /api/
