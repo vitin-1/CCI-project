@@ -64,9 +64,12 @@ export default function RegisterScreen() {
 
   return (
     <div className="screen" style={{ paddingTop: 40, gap: 24, justifyContent: 'center' }}>
-      <div className="anim-fade-in-up">
-        <h1 style={{ marginBottom: 8 }}>Cadastro</h1>
-        <p>Preencha seus dados para continuar.</p>
+      <div className="anim-fade-in-up" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 12 }}>
+        <img src="/logo.jpg" alt="CCI Aliança" style={{ width: 56, height: 56, borderRadius: '50%', objectFit: 'cover' }} />
+        <div>
+          <h1 style={{ marginBottom: 8 }}>Cadastro</h1>
+          <p>Preencha seus dados para continuar.</p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="anim-fade-in-up delay-1" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

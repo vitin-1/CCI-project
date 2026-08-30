@@ -46,9 +46,12 @@ export default function ConsentScreen() {
 
   return (
     <div className="screen" style={{ paddingTop: 32, gap: 20, paddingBottom: 32 }}>
-      <div className="anim-fade-in-up">
-        <h1 style={{ fontSize: 22, marginBottom: 8 }}>Privacidade e Consentimento</h1>
-        <p style={{ fontSize: 14 }}>Leia com atenção antes de continuar.</p>
+      <div className="anim-fade-in-up" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <img src="/logo.jpg" alt="CCI Aliança" style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+        <div>
+          <h1 style={{ fontSize: 22, marginBottom: 4 }}>Privacidade e Consentimento</h1>
+          <p style={{ fontSize: 14 }}>Leia com atenção antes de continuar.</p>
+        </div>
       </div>
 
       {/* Texto LGPD — scrollável se o conteúdo for maior que a tela */}

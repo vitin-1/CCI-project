@@ -47,12 +47,35 @@ import NotFoundScreen from './screens/NotFoundScreen';
 
 // ─── Layouts ──────────────────────────────────────────────────────────────────
 
+function BrandBar() {
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      padding: '10px 20px',
+      borderBottom: '1px solid var(--border)',
+      flexShrink: 0,
+    }}>
+      <img
+        src="/logo.jpg"
+        alt="CCI Aliança"
+        style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' }}
+      />
+      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent)', letterSpacing: '0.5px' }}>
+        CCI ALIANÇA
+      </span>
+    </div>
+  );
+}
+
 // Área autenticada com bottom nav (Início, Eventos, Minhas Fotos, Perfil, Detalhe)
 function MainLayout() {
   const { state } = useApp();
   if (!state.memberId) return <Navigate to="/welcome" replace />;
   return (
     <div className="screen-full" style={{ display: 'flex', flexDirection: 'column' }}>
+      <BrandBar />
       <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <Outlet />
       </div>
@@ -67,10 +90,13 @@ function FlowLayout() {
   const { state } = useApp();
   if (!state.memberId) return <Navigate to="/welcome" replace />;
   return (
-    <>
-      <Outlet />
+    <div className="screen-full" style={{ display: 'flex', flexDirection: 'column' }}>
+      <BrandBar />
+      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <Outlet />
+      </div>
       <Toast />
-    </>
+    </div>
   );
 }
 
