@@ -268,9 +268,9 @@ export default function PhotoDetailScreen() {
   const photo = loc?.photo;
   const isFav = photo ? state.favorites.has(photo.photo_id) : false;
 
-  // Acesso direto pela URL sem state → volta para a tela anterior
+  // Acesso direto pela URL sem state → vai para início
   if (!photo) {
-    navigate(-1);
+    navigate('/', { replace: true });
     return null;
   }
 

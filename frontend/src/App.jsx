@@ -85,18 +85,15 @@ function MainLayout() {
   );
 }
 
-// Fluxo de câmera/busca: autenticado mas sem bottom nav para tela cheia
+// Fluxo de câmera/busca: sem BrandBar — câmera e processing precisam de tela cheia
 function FlowLayout() {
   const { state } = useApp();
   if (!state.memberId) return <Navigate to="/welcome" replace />;
   return (
-    <div className="screen-full" style={{ display: 'flex', flexDirection: 'column' }}>
-      <BrandBar />
-      <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <Outlet />
-      </div>
+    <>
+      <Outlet />
       <Toast />
-    </div>
+    </>
   );
 }
 

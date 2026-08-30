@@ -12,12 +12,14 @@
  *   POST /consent é idempotente: re-consent apenas atualiza consent_accepted_at no backend
  */
 
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 export default function ProfileScreen() {
   const navigate = useNavigate();
   const { state, dispatch } = useApp();
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   function logout() {
     dispatch({ type: 'LOGOUT' });
@@ -90,16 +92,25 @@ export default function ProfileScreen() {
       </div>
 
       <div className="anim-fade-in-up delay-3">
-        <button
-          className="btn btn-danger"
-          onClick={() => {
-            if (window.confirm('Tem certeza que deseja sair? Suas fotos salvas serão mantidas.')) {
-              logout();
-            }
-          }}
-        >
-          Sair da conta
-        </button>
+        {confirmLogout ? (
+          <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <p style={{ fontSize: 14, color: 'var(--text)', textAlign: 'center' }}>
+              Tem certeza? Suas fotos salvas serão mantidas.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-danger" style={{ flex: 1 }} onClick={logout}>
+                Sair
+              </button>
+              <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => setConfirmLogout(false)}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="btn btn-danger" onClick={() => setConfirmLogout(true)}>
+            Sair da conta
+          </button>
+        )}
       </div>
 
       <p className="anim-fade-in-up delay-4" style={{ fontSize: 11, textAlign: 'center', color: 'var(--text-muted)', marginTop: 8 }}>

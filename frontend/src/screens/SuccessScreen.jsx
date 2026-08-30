@@ -24,6 +24,11 @@ export default function SuccessScreen() {
   const total = loc?.total || 0;
   const results = loc?.results || [];
 
+  // Guard: sem dados de busca → volta para o início
+  useEffect(() => {
+    if (!loc?.total) navigate('/', { replace: true });
+  }, []);
+
   // Conta eventos únicos presentes nos resultados para exibir na mensagem
   const eventCount = new Set(results.map((r) => r.event_id).filter(Boolean)).size;
 
