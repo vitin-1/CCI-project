@@ -42,6 +42,9 @@ import AdminLoginScreen from './screens/admin/AdminLoginScreen';
 import AdminQueueScreen from './screens/admin/AdminQueueScreen';
 import AdminCaseScreen from './screens/admin/AdminCaseScreen';
 
+// ─── Erros ───────────────────────────────────────────────────────────────────
+import NotFoundScreen from './screens/NotFoundScreen';
+
 // ─── Layouts ──────────────────────────────────────────────────────────────────
 
 // Área autenticada com bottom nav (Início, Eventos, Minhas Fotos, Perfil, Detalhe)
@@ -115,8 +118,8 @@ function AppRoutes() {
         <Route path="/admin/queue" element={<AdminQueueScreen />} />
         <Route path="/admin/case/:id" element={<AdminCaseScreen />} />
 
-        {/* Fallback — qualquer URL desconhecida vai para splash */}
-        <Route path="*" element={<Navigate to="/splash" replace />} />
+        {/* Fallback — qualquer URL desconhecida exibe tela 404 */}
+        <Route path="*" element={<NotFoundScreen />} />
       </Routes>
     </div>
   );
